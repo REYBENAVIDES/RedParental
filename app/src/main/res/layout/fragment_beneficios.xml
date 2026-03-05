@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_1"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingTop="90dp"
+    android:paddingBottom="30dp">
+
+    <!-- Ilustración central -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_marginStart="30dp"
+        android:layout_marginEnd="30dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/img_beneficios" />
+
+    <!-- Título principal -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:text="Por Qué Elegirnos"
+        android:textColor="@color/titulo"
+        android:textSize="32sp"
+        android:textStyle="bold" />
+
+    <!-- Espacio para los beneficios -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingStart="50dp"
+        android:paddingEnd="50dp"
+        android:paddingTop="20dp">
+
+        <!-- Beneficio 1: Monitoreo -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_monitoreo_blanco"
+                app:tint="@color/primario" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:lineSpacingExtra="4dp"
+                android:text="Monitoreo Inteligente - Detecta y gestiona dispositivos conectados en tiempo real"
+                android:textColor="@color/texto"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+        <!-- Beneficio 2: Filtros -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_filtro_blanco"
+                app:tint="@color/primario" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:lineSpacingExtra="4dp"
+                android:text="Filtros Avanzados - Bloquea contenido no deseado con reglas personalizadas"
+                android:textColor="@color/texto"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Botón siguiente -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNextBenefits"
+        style="@style/Widget.Material3.Button"
+        android:layout_width="85dp"
+        android:layout_height="85dp"
+        android:layout_marginBottom="50dp"
+        android:text=""
+        android:textColor="@color/white"
+        app:backgroundTint="@color/primario"
+        app:cornerRadius="50dp"
+        app:icon="@drawable/ic_siguiente"
+        app:iconGravity="textStart"
+        app:iconPadding="0dp"
+        app:iconTint="@color/white" />
+
+</LinearLayout>

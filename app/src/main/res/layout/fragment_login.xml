@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_1_alt"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingTop="90dp"
+    android:paddingBottom="40dp">
+
+    <!-- Ilustración central -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="250dp"
+        android:layout_marginStart="30dp"
+        android:layout_marginEnd="30dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/img_logo" />
+
+    <!-- Título principal -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="RPLife"
+        android:textColor="@color/titulo_alt"
+        android:textSize="32sp"
+        android:textStyle="bold" />
+
+    <!-- Subtítulo descriptivo -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginEnd="48dp"
+        android:lineSpacingExtra="4dp"
+        android:text="Inicia sesión de forma segura para comenzar a proteger tu red familiar"
+        android:textAlignment="center"
+        android:textColor="@color/texto_alt"
+        android:textSize="14sp" />
+
+    <!-- Espacio flexible para empujar elementos hacia abajo -->
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Botón Google -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGoogleLogin"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginStart="50dp"
+        android:layout_marginEnd="50dp"
+        android:backgroundTint="@color/white"
+
+        android:text="Continuar con Google"
+        android:textColor="@color/titulo"
+        android:textSize="16sp"
+        app:cornerRadius="16dp"
+        app:icon="@drawable/img_logo_google"
+        app:iconGravity="textStart"
+        app:iconPadding="12dp"
+        app:iconSize="20dp"
+        app:iconTint="@null" />
+
+    <!-- Términos y condiciones -->
+    <TextView
+        android:id="@+id/tvTerms"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="50dp"
+        android:layout_marginEnd="50dp"
+        android:layout_marginBottom="50dp"
+        android:layout_marginTop="25dp"
+        android:alpha="0.7"
+        android:text="Al continuar, aceptas nuestros Términos de servicio y Política de privacidad"
+        android:textAlignment="center"
+        android:textColor="@color/texto_alt"
+        android:textSize="12sp" />
+
+</LinearLayout>

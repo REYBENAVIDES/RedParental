@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_1"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingTop="90dp"
+    android:paddingBottom="30dp">
+
+    <!-- Ilustración central -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_marginStart="30dp"
+        android:layout_marginEnd="30dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/img_bienvenida" />
+
+    <!-- Título principal -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:text="¡Bienvenido a RPLife!"
+        android:textColor="@color/titulo"
+        android:textSize="32sp"
+        android:textStyle="bold" />
+
+    <!-- Subtítulo descriptivo -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginStart="48dp"
+        android:layout_marginEnd="48dp"
+        android:lineSpacingExtra="4dp"
+        android:text="Descubre cómo proteger tu hogar con control inteligente y simple."
+        android:textAlignment="center"
+        android:textColor="@color/texto"
+        android:textSize="16sp" />
+
+    <!-- Espacio flexible para empujar el botón hacia abajo -->
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Botón siguiente -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNextWelcome"
+        style="@style/Widget.Material3.Button"
+        android:layout_width="85dp"
+        android:layout_height="85dp"
+        android:layout_marginBottom="50dp"
+        android:text=""
+        android:textColor="@color/white"
+        app:backgroundTint="@color/primario"
+        app:cornerRadius="50dp"
+        app:icon="@drawable/ic_siguiente"
+        app:iconGravity="textStart"
+        app:iconPadding="0dp"
+        app:iconTint="@color/white" />
+
+</LinearLayout>

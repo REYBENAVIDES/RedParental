@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/opc_renombrar"
+        android:title="Renombrar" />
+    <item
+        android:id="@+id/opc_historial"
+        android:title="Historial" />
+    <item
+        android:id="@+id/opc_notificar"
+        android:title="Notificar (Seguimiento en vivo)" />
+    <item
+        android:id="@+id/opc_bloquear"
+        android:title="Bloquear Internet" />
+</menu>

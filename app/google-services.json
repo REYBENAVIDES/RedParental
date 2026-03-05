@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "159591751405",
+    "project_id": "redpaternal",
+    "storage_bucket": "redpaternal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159591751405:android:f616fa641bdbf51f4b76e4",
+        "android_client_info": {
+          "package_name": "com.example.redpaternal"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "159591751405-o9avi696jdegs8tqah8at2jpk9vsl4gu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.redpaternal",
+            "certificate_hash": "06b6c1ff13c804caace21d28842be5219d554e1b"
+          }
+        },
+        {
+          "client_id": "159591751405-m5vd7dcdkqff5cltdtm3ikc1bejqj4gg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDl_KWMoZbAKxjZOjqjEV8VaaXAkn9fghQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159591751405-m5vd7dcdkqff5cltdtm3ikc1bejqj4gg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

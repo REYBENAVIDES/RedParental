@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_1"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingTop="60dp"
+    android:paddingBottom="30dp">
+
+    <!-- Icono central de seguridad -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_marginStart="30dp"
+        android:layout_marginEnd="30dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/img_seguridad" />
+
+    <!-- Título -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:text="Seguridad Garantizada"
+        android:textColor="@color/titulo"
+        android:textSize="32sp"
+        android:textStyle="bold" />
+
+    <!-- Descripción -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="40dp"
+        android:layout_marginEnd="40dp"
+        android:lineSpacingExtra="4dp"
+        android:text="Tu privacidad es nuestra prioridad. Solo pedimos lo esencial para funcionar."
+        android:textAlignment="center"
+        android:textColor="@color/texto"
+        android:textSize="16sp" />
+
+    <!-- Espacio para la lista de permisos -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingStart="40dp">
+
+        <!-- Permiso 1: Acceso WiFi seguro -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_check"
+                app:tint="@color/primario" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Acceso WiFi seguro"
+                android:textColor="@color/texto"
+                android:textSize="16sp" />
+
+        </LinearLayout>
+
+        <!-- Permiso 2: Encriptación de datos -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_check"
+                app:tint="@color/primario" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Encriptación de datos"
+                android:textColor="@color/texto"
+                android:textSize="16sp" />
+
+        </LinearLayout>
+
+        <!-- Permiso 3: Sin almacenamiento innecesario -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_check"
+                app:tint="@color/primario" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Sin almacenamiento innecesario"
+                android:textColor="@color/texto"
+                android:textSize="16sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Botón siguiente -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNextSecurity"
+        style="@style/Widget.Material3.Button"
+        android:layout_width="85dp"
+        android:layout_height="85dp"
+        android:layout_marginBottom="50dp"
+        android:text=""
+        android:textColor="@color/white"
+        app:backgroundTint="@color/primario"
+        app:cornerRadius="50dp"
+        app:icon="@drawable/ic_siguiente"
+        app:iconGravity="textStart"
+        app:iconPadding="0dp"
+        app:iconTint="@color/white" />
+
+</LinearLayout>

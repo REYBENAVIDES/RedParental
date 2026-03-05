@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Colores de la app movil -->
+    <color name="primario">#6743F5</color>
+    <color name="secondario">#EFE9FF</color>
+    <color name="nombre_app">#8669F0</color>
+    <color name="titulo">#252223</color>
+    <color name="white">#ffffff</color>
+    <color name="texto">#7C797A</color>
+    <color name="fondo_1">#FFFDFE</color>
+    <color name="fondo_2">#F5F3F5</color>
+
+    <color name="primario_alt">#FFFDFE</color>
+    <color name="secondario_alt">#9981FB</color>
+    <color name="nombre_app_alt">#8669F0</color>
+    <color name="titulo_alt">#FFFDFE</color>
+    <color name="texto_alt">#DBD0F7</color>
+    <color name="fondo_1_alt">#442F98</color>
+    <color name="fondo_2_alt">#5242A0</color>
+
+    <color name="success">#04a45b</color>
+    <color name="warning">#e4ca04</color>
+    <color name="danger">#f40901</color>
+
+</resources>

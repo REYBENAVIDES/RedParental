@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_monitoreo"
+        android:icon="@drawable/nav_monitoreo"
+        android:title="Monitoreo" />
+
+    <item
+        android:id="@+id/nav_filtro"
+        android:icon="@drawable/nav_filtro"
+        android:title="Filtros" />
+
+    <item
+        android:id="@+id/nav_ajustes"
+        android:icon="@drawable/nav_ajuste"
+        android:title="Ajustes" />
+</menu>
