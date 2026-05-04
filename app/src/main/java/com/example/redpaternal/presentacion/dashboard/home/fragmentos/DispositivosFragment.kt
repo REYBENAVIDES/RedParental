@@ -82,33 +82,44 @@ class DispositivosFragment : Fragment() {
             enlace.rvRouters.isEnabled = false
             Toast.makeText(context, "Verificando acceso local...", Toast.LENGTH_SHORT).show()
 
-            var clienteTemp: AyudanteTPLink? = null
-
             try {
                 val ip = router.ipPuertaEnlace
                 val pass = router.claveAdmin ?: ""
 
                 if (pass.isEmpty()) throw Exception("Sin contraseña guardada.")
 
-                clienteTemp = AyudanteTPLink(ip, pass)
-                clienteTemp.autorizar()
-                clienteTemp.cerrarSesion()
+                // 1. Instancia Singleton: Si ya hay sesión abierta por el fondo, la usa.
+                val clienteTemp = AyudanteTPLink.obtenerInstancia(ip, pass)
 
+                // 2. Probamos que el router responda pidiéndole el firmware
+                // Esto forzará la negociación (asegurarSesion) a través de transaccionSegura
+                // y limpiará cookies automáticamente si hubiera un 408 estancado.
+                clienteTemp.obtenerFirmware()
+
+                // Si no hay excepción, el túnel está limpio y vivo
                 abrirDetalle(router)
 
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 when {
-                    msg.contains("408") -> Toast.makeText(context, "Router ocupado. Espera un momento.", Toast.LENGTH_LONG).show()
-                    msg.contains("401") || msg.contains("Fallo") -> Toast.makeText(context, "Contraseña incorrecta. Reconfigura el router.", Toast.LENGTH_LONG).show()
-                    else -> Toast.makeText(context, "Error local: $msg", Toast.LENGTH_SHORT).show()
+                    msg.contains("401") || msg.contains("Fallo") || msg.contains("Error params") -> {
+                        Toast.makeText(context, "Contraseña incorrecta. Reconfigura el router.", Toast.LENGTH_LONG).show()
+                    }
+                    msg.contains("408") || msg.contains("timeout") -> {
+                        // El nuevo AyudanteTPLink reintenta hasta 3 veces internamente.
+                        // Si después de eso sigue dando 408, el router realmente está colapsado.
+                        Toast.makeText(context, "Router saturado. Intenta en unos segundos.", Toast.LENGTH_LONG).show()
+                    }
+                    else -> {
+                        Toast.makeText(context, "Error de conexión: $msg", Toast.LENGTH_SHORT).show()
+                    }
                 }
             } finally {
+                // Restauramos la UI
                 if (_enlace != null) {
                     enlace.rvRouters.alpha = 1.0f
                     enlace.rvRouters.isEnabled = true
                 }
-                try { clienteTemp?.cerrarSesion() } catch (e: Exception) {}
             }
         }
     }

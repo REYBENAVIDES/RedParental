@@ -12,7 +12,7 @@ data class Dispositivo(
 
     // Estado
     val estaConectado: Boolean = false,
-    val estaBloqueado: Boolean = false,
+    var estaBloqueado: Boolean = false,
 
     val fechaUltimaConexion: Date? = null,
     val fechaRegistro: Date? = null,

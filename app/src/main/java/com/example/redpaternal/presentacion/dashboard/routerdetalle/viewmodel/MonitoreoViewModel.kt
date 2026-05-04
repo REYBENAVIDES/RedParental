@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.redpaternal.datos.modelo.Dispositivo
 import com.example.redpaternal.datos.modelo.SitioVisitado
 import com.example.redpaternal.datos.remoto.AyudanteBaseDatosFirebase
+import com.example.redpaternal.datos.remoto.AyudanteTPLink
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -136,6 +137,44 @@ class MonitoreoViewModel(application: Application) : AndroidViewModel(applicatio
                 nombreSitio,
                 bloquear
             )
+        }
+    }
+
+    fun cambiarEstadoBloqueoDispositivo(macRouter: String, macDispositivo: String, nombre: String, bloquear: Boolean, onResultado: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d("MonitoreoVM", "▶️ Iniciando proceso. Estado solicitado: Bloqueado=$bloquear")
+
+                val credenciales = ayudanteFirebase.obtenerCredencialesRouter(macRouter)
+                if (credenciales == null || credenciales.second.isEmpty()) {
+                    throw Exception("No se encontraron credenciales en BD")
+                }
+
+                // Usamos la instancia Singleton unificada
+                val ayudanteTplink = AyudanteTPLink.obtenerInstancia(credenciales.first, credenciales.second)
+
+                Log.d("MonitoreoVM", "⏳ Enviando comando al router...")
+
+                // 🌟 MIRA AQUÍ: Llamamos directamente a la función, ella sola gestiona la cola y la sesión
+                if (bloquear) {
+                    ayudanteTplink.bloquearDispositivoLocal(nombre, macDispositivo)
+                } else {
+                    ayudanteTplink.desbloquearDispositivoLocal(macDispositivo)
+                }
+
+                Log.d("MonitoreoVM", "✅ Hardware actualizado. Sincronizando con Firebase...")
+                ayudanteFirebase.bloquearAccesoInternetDispositivo(macRouter, macDispositivo, bloquear)
+
+                withContext(Dispatchers.Main) {
+                    onResultado(true, if (bloquear) "Dispositivo bloqueado" else "Dispositivo desbloqueado")
+                }
+            } catch (e: Exception) {
+                Log.e("MonitoreoVM", "❌ Error crítico: ${e.message}")
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onResultado(false, "Error: ${e.message}")
+                }
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.redpaternal.presentacion.dashboard.routerdetalle.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -40,7 +41,7 @@ class RouterViewModel(application: Application) : AndroidViewModel(application) 
         if (macRouterObjetivo == info.macRouter) return
 
         macRouterObjetivo = info.macRouter
-        ayudanteTplink = AyudanteTPLink(info.ipPuertaEnlace, info.claveAdmin ?: "")
+        ayudanteTplink = AyudanteTPLink.obtenerInstancia(info.ipPuertaEnlace, info.claveAdmin ?: "")
         _estadoCarga.value = true
 
         iniciarLogicaConexion()
@@ -78,10 +79,11 @@ class RouterViewModel(application: Application) : AndroidViewModel(application) 
             onError = { _ -> }
         )
     }
-
     private suspend fun ejecutarEscaneoLocal() {
         try {
+            // Nada de try/catch de autorizaciones, solo pides la data.
             val estadoRouter = ayudanteTplink?.obtenerEstadoCompleto() ?: return
+
             val dispositivosRaw = estadoRouter.dispositivos ?: emptyList()
 
             val dispositivosNuevos = dispositivosRaw.map { raw ->
@@ -95,7 +97,9 @@ class RouterViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             ayudanteFirebase.guardarEstadoActualEnLote(macRouterObjetivo, dispositivosNuevos)
-        } catch (e: Exception) { }
+        } catch (e: Exception) {
+            Log.e("RouterViewModel", "Fallo en escaneo: ${e.message}")
+        }
     }
 
     private fun adivinarTipo(nombre: String): TipoDispositivo {

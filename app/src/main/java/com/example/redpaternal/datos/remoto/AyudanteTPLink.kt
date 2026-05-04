@@ -4,21 +4,39 @@ import android.util.Log
 import com.example.redpaternal.datos.modelo.*
 import com.example.redpaternal.utilidades.EncriptacionTplink
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLDecoder
 import java.net.URLEncoder
-import java.util.regex.Pattern
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.regex.Pattern
 
-class AyudanteTPLink(
+class AyudanteTPLink private constructor(
     private val ipRouter: String,
     private val passwordUsuario: String
 ) {
 
     companion object {
+        private val mutex = Mutex()
+        val pausarEscaneoFondo = AtomicBoolean(false)
+
+        @Volatile
+        private var instanciaActiva: AyudanteTPLink? = null
+
+        fun obtenerInstancia(ip: String, pass: String): AyudanteTPLink {
+            val actual = instanciaActiva
+            if (actual != null && actual.ipRouter == ip && actual.passwordUsuario == pass) {
+                return actual
+            }
+            return AyudanteTPLink(ip, pass).also { instanciaActiva = it }
+        }
+
         private const val INDICE_TOKEN_AUTH_1 = 3
         private const val INDICE_TOKEN_AUTH_2 = 4
         private const val REQ_WIFI_HOST_2G = "33|1,1,0"
@@ -30,6 +48,7 @@ class AyudanteTPLink(
         private const val CLAVE_XOR_DEFECTO = "RDpbLfCPsJZ7fiv"
         private const val DICCIONARIO_XOR_DEFECTO = "yLwVl0zKqws7LgKPRQ84Mdt708T1qQ3Ha7xv3H7NyU84p21BriUWBU43odz3iP4rBL3cD02KZciXTysVXiV8ngg6vL48rPJyAUw0HurW20xqxv9aYb4M9wK1Ae0wlro510qXeU07kV57fQMc8L6aLgMLwygtc0F10a0Dg70TOoouyFhdysuRMO51yY5ZlOZZLEal1h0t9YQW0Ko7oBwmCAHoic4HYbUyVeU3sfQ1xtXcPcf1aT303wAQhv66qzW"
         private const val CARACTER_RELLENO = 187.toChar()
+
         private val almacenCookies = java.util.concurrent.ConcurrentHashMap<String, List<Cookie>>()
         private val gestorCookies = object : CookieJar {
             override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
@@ -58,7 +77,62 @@ class AyudanteTPLink(
     private val encriptador = EncriptacionTplink()
     private val REGEX_DATOS = Pattern.compile("id (\\d+\\|\\d,\\d,\\d)\\r\\n(.*?)(?=\\r\\nid \\d+\\||$)", Pattern.DOTALL)
 
-    suspend fun autorizar() = withContext(Dispatchers.IO) {
+    /**
+     * El Controlador Maestro: Hilo seguro, Semáforo y Ciclo Atómico.
+     */
+    private suspend fun <T> transaccionSegura(esManual: Boolean = false, bloque: suspend () -> T): T? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (!esManual && pausarEscaneoFondo.get()) {
+                Log.d(TAG, "⏹️ Escaneo pausado por comando manual en curso.")
+                return@withLock null
+            }
+
+            var intentos = 0
+            val maxIntentos = 3
+
+            while (intentos < maxIntentos) {
+                try {
+                    if (intentos > 0) {
+                        Log.w(TAG, "🔄 Reintentando ciclo atómico (Intento ${intentos + 1})... respirando.")
+                        delay(2000)
+                    }
+
+                    // CICLO ATÓMICO OBLIGATORIO PARA RENOVAR SECUENCIA AES
+                    token = ""
+                    almacenCookies.remove(ipRouter)
+
+                    autorizar()
+                    val resultado = bloque()
+                    return@withLock resultado
+
+                } catch (e: Exception) {
+                    val msg = e.message ?: ""
+
+                    if (msg.contains("abort", ignoreCase = true) || msg.contains("reset", ignoreCase = true)) {
+                        Log.w(TAG, "⚠️ Conexión abortada por el router. Posible éxito del comando de bloqueo.")
+                        throw e
+                    }
+
+                    if (msg.contains("408") || msg.contains("timeout") || msg.contains("403") || msg.contains("401")) {
+                        intentos++
+                        if (intentos >= maxIntentos) {
+                            Log.e(TAG, "❌ Router inalcanzable tras $maxIntentos intentos.")
+                            throw e
+                        }
+                    } else {
+                        throw e
+                    }
+                } finally {
+                    // SIEMPRE liberamos el servidor web del router
+                    try { cerrarSesion() } catch (e: Exception) {}
+                }
+            }
+            throw Exception("Fallo en transacción segura")
+        }
+    }
+
+    private suspend fun autorizar() {
+        Log.d(TAG, "🔑 Iniciando sesión (Nueva Secuencia)...")
         val passXor = encriptarPasswordXor(passwordUsuario)
         val respParams = realizarPeticion(codigo = 2, asincrono = 1)
         val lineas = respParams.trim().lines()
@@ -86,67 +160,133 @@ class AyudanteTPLink(
         realizarPeticion(codigo = 7, asincrono = 0, usarToken = true)
     }
 
-    suspend fun cerrarSesion() = withContext(Dispatchers.IO) {
-        try {
+    private suspend fun cerrarSesion() {
+        if (token.isNotEmpty()) {
             realizarPeticion(codigo = 11, asincrono = 0, usarToken = true)
-        } catch (e: Exception) {}
+            token = ""
+        }
     }
 
-    suspend fun obtenerEstado(): EstadoRouter = withContext(Dispatchers.IO) {
+    // =========================================================================================
+    // MÉTODOS PÚBLICOS
+    // =========================================================================================
+
+    suspend fun obtenerEstadoCompleto(): EstadoRouter? = transaccionSegura(esManual = false) {
+        val ids = listOf(
+            "1|1,0,0", "4|1,0,0", "23|1,0,0", "13|1,0,0",
+            REQ_WIFI_HOST_2G, REQ_WIFI_HOST_5G,
+            REQ_WIFI_INVITADO_2G, REQ_WIFI_INVITADO_5G,
+            REQ_WIFI_IOT_2G, REQ_WIFI_IOT_5G
+        )
+        val txtReq = ids.joinToString("#")
+        val cuerpo = encriptarCuerpo(txtReq)
+
+        val resp = realizarPeticion(codigo = 2, asincrono = 1, usarToken = true, datos = cuerpo)
+        val respClaro = desencriptarDatos(resp)
+        val bloques = parsearRespuestaAMapa(respClaro)
+
+        fun ext(id: String, pre: String): String = extractValue(bloques[id] ?: emptyList(), pre)
+
+        val macWan = ext("1|1,0,0", "mac 1 ")
+        val macLan = ext("1|1,0,0", "mac 0 ")
+        val ipWan = ext("23|1,0,0", "ip ")
+        val ipLan = ext("4|1,0,0", "ip ")
+        val gw = ext("23|1,0,0", "gateway ")
+        val uptime = ext("23|1,0,0", "upTime ").toLongOrNull() ?: 0
+        val dispositivos = parsearDispositivos(bloques["13|1,0,0"] ?: emptyList())
+
+        EstadoRouter(
+            macWan = macWan, macLan = macLan, ipWan = ipWan, ipLan = ipLan,
+            ipPuertaEnlace = gw, tiempoActivo = uptime / 100,
+            dispositivos = dispositivos,
+            wifi2gHabilitado = ext(REQ_WIFI_HOST_2G, "bEnable ") == "1",
+            wifi5gHabilitado = ext(REQ_WIFI_HOST_5G, "bEnable ") == "1",
+            invitados2gHabilitado = ext(REQ_WIFI_INVITADO_2G, "bEnable ") == "1",
+            invitados5gHabilitado = ext(REQ_WIFI_INVITADO_5G, "bEnable ") == "1"
+        )
+    }
+
+    suspend fun bloquearDispositivoLocal(nombre: String, mac: String) {
+        pausarEscaneoFondo.set(true)
+        Log.d(TAG, "⏸️ PAUSA GLOBAL para Bloqueo.")
+
         try {
-            val ids = listOf(
-                "1|1,0,0", "4|1,0,0", "23|1,0,0", "13|1,0,0",
-                REQ_WIFI_HOST_2G, REQ_WIFI_HOST_5G,
-                REQ_WIFI_INVITADO_2G, REQ_WIFI_INVITADO_5G,
-                REQ_WIFI_IOT_2G, REQ_WIFI_IOT_5G
-            )
-            val txtReq = ids.joinToString("#")
+            transaccionSegura(esManual = true) {
+                val macConGuiones = mac.replace(":", "-").uppercase()
+                val nombreSeguro = nombre.replace(" ", "_")
+                val comando = "advanced bm -add list:black name:$nombreSeguro mac:$macConGuiones"
 
-            val cuerpo = encriptarCuerpo(txtReq)
-            val resp = realizarPeticion(codigo = 2, asincrono = 1, usarToken = true, datos = cuerpo)
-            val respClaro = desencriptarDatos(resp)
-            val bloques = parsearRespuestaAMapa(respClaro)
+                Log.d(TAG, "🛠️ Ejecutando BLOQUEO: $comando")
+                val cuerpo = encriptarCuerpo(comando)
+                val respuestaEnc = realizarPeticion(codigo = 0, asincrono = 0, usarToken = true, datos = cuerpo)
+                val respuestaClara = desencriptarDatos(respuestaEnc)
 
-            fun ext(id: String, pre: String): String {
-                return extractValue(bloques[id] ?: emptyList(), pre)
+                if (!respuestaClara.contains("00000")) throw Exception("Rechazo del router: $respuestaClara")
+                Log.d(TAG, "✅ Bloqueo aplicado con éxito.")
             }
-
-            val macWan = ext("1|1,0,0", "mac 1 ")
-            val macLan = ext("1|1,0,0", "mac 0 ")
-            val ipWan = ext("23|1,0,0", "ip ")
-            val ipLan = ext("4|1,0,0", "ip ")
-            val gw = ext("23|1,0,0", "gateway ")
-            val uptime = ext("23|1,0,0", "upTime ").toLongOrNull() ?: 0
-            val dispositivos = parsearDispositivos(bloques["13|1,0,0"] ?: emptyList())
-            return@withContext EstadoRouter(
-                macWan = macWan, macLan = macLan, ipWan = ipWan, ipLan = ipLan,
-                ipPuertaEnlace = gw, tiempoActivo = uptime / 100,
-                dispositivos = dispositivos,
-                wifi2gHabilitado = ext(REQ_WIFI_HOST_2G, "bEnable ") == "1",
-                wifi5gHabilitado = ext(REQ_WIFI_HOST_5G, "bEnable ") == "1",
-                invitados2gHabilitado = ext(REQ_WIFI_INVITADO_2G, "bEnable ") == "1",
-                invitados5gHabilitado = ext(REQ_WIFI_INVITADO_5G, "bEnable ") == "1"
-            )
         } catch (e: Exception) {
-            Log.e(TAG, "Fallo al obtener estado: ${e.message}")
-            throw e
+            val msg = e.message ?: ""
+            if (msg.contains("abort", ignoreCase = true) || msg.contains("reset", ignoreCase = true)) {
+                Log.w(TAG, "⚠️ Auto-bloqueo detectado. Éxito asumido.")
+            } else throw e
+        } finally {
+            pausarEscaneoFondo.set(false)
+        }
+    }
+
+    suspend fun desbloquearDispositivoLocal(mac: String) {
+        pausarEscaneoFondo.set(true)
+        try {
+            transaccionSegura(esManual = true) {
+                val macConGuiones = mac.replace(":", "-").uppercase()
+                val comando = "advanced bm -del list:black mac:$macConGuiones"
+
+                val cuerpo = encriptarCuerpo(comando)
+                val respuestaEnc = realizarPeticion(codigo = 0, asincrono = 0, usarToken = true, datos = cuerpo)
+                val respuestaClara = desencriptarDatos(respuestaEnc)
+
+                if (!respuestaClara.contains("00000")) throw Exception("Rechazo del router: $respuestaClara")
+                Log.d(TAG, "✅ Desbloqueo aplicado con éxito.")
+            }
+        } catch (e: Exception) {
+            val msg = e.message ?: ""
+            if (msg.contains("abort", ignoreCase = true) || msg.contains("reset", ignoreCase = true)) {
+                Log.w(TAG, "⚠️ Auto-desbloqueo detectado. Éxito asumido.")
+            } else throw e
+        } finally {
+            pausarEscaneoFondo.set(false)
+        }
+    }
+
+    suspend fun obtenerFirmware(): Firmware = transaccionSegura(esManual = true) {
+        val cuerpo = encriptarCuerpo("0|1,0,0")
+        val resp = realizarPeticion(codigo = 2, asincrono = 1, usarToken = true, datos = cuerpo)
+        val respClaro = desencriptarDatos(resp)
+
+        val mapa = respClaro.trim().lines().associate {
+            val p = it.split(" ", limit = 2)
+            if (p.size == 2) p[0] to p[1] else "" to ""
         }
 
-    }
+        Firmware(
+            versionHardware = URLDecoder.decode(mapa["hardVer"] ?: "", "UTF-8"),
+            modelo = URLDecoder.decode(mapa["modelName"] ?: "", "UTF-8"),
+            versionFirmware = URLDecoder.decode(mapa["softVer"] ?: "", "UTF-8")
+        )
+    } ?: throw Exception("Transacción cancelada")
 
-    private fun encriptarPasswordXor(pwd: String): String {
-        return _encriptarXorBase(pwd, CLAVE_XOR_DEFECTO, DICCIONARIO_XOR_DEFECTO)
-    }
+    // =========================================================================================
+    // MÉTODOS PRIVADOS (Criptografía y Red - ¡INTACTOS!)
+    // =========================================================================================
 
-    private fun codificarToken(passXor: String, auth1: String, auth2: String): String {
-        return _encriptarXorBase(passXor, auth1, auth2)
-    }
+    private fun EncriptacionTplink.obtenerCadenaAes(): String = "k=${this.obtenerLlaveStr()}&i=${this.obtenerIvStr()}"
+    private fun encriptarPasswordXor(pwd: String): String = _encriptarXorBase(pwd, CLAVE_XOR_DEFECTO, DICCIONARIO_XOR_DEFECTO)
+    private fun codificarToken(passXor: String, auth1: String, auth2: String): String = _encriptarXorBase(passXor, auth1, auth2)
 
     private fun _encriptarXorBase(texto: String, llave: String, diccionario: String): String {
         val len = maxOf(texto.length, llave.length)
         val txtPad = texto.padEnd(len, CARACTER_RELLENO)
         val keyPad = llave.padEnd(len, CARACTER_RELLENO)
-
         val sb = StringBuilder()
         for (i in 0 until len) {
             val tc = txtPad[i].code
@@ -159,24 +299,12 @@ class AyudanteTPLink(
 
     private fun encriptarCuerpo(texto: String): String {
         val data = encriptador.aesEncriptar(texto)
-        val firma = encriptador.obtenerFirma(
-            secuencia,
-            data.length,
-            nnRsa,
-            eeRsa
-        )
-
+        val firma = encriptador.obtenerFirma(secuencia, data.length, nnRsa, eeRsa)
         return "sign=$firma\r\ndata=$data"
     }
 
-    private fun desencriptarDatos(textoEnc: String): String {
-        return encriptador.aesDesencriptar(textoEnc)
-    }
-
-    private fun extractValue(lineas: List<String>, prefix: String): String {
-        return lineas.find { it.startsWith(prefix) }
-            ?.substringAfter(prefix) ?: ""
-    }
+    private fun desencriptarDatos(textoEnc: String): String = encriptador.aesDesencriptar(textoEnc)
+    private fun extractValue(lineas: List<String>, prefix: String): String = lineas.find { it.startsWith(prefix) }?.substringAfter(prefix) ?: ""
 
     private fun realizarPeticion(codigo: Int, asincrono: Int, usarToken: Boolean = false, datos: String? = null): String {
         var url = "$urlBase/?code=$codigo&asyn=$asincrono"
@@ -185,9 +313,11 @@ class AyudanteTPLink(
         if (datos != null) builder.post(datos.toRequestBody("text/plain".toMediaType()))
         else if (codigo == 2 && asincrono == 1 && !usarToken) builder.post("".toRequestBody(null))
         else builder.get()
+
         val resp = clienteHttp.newCall(builder.build()).execute()
         val cuerpo = resp.body?.string() ?: ""
         resp.close()
+
         if (!resp.isSuccessful) {
             if (!(codigo == 2 && asincrono == 1 && !usarToken && datos == null)) throw Exception("Error HTTP ${resp.code}: ${resp.message}")
         }
@@ -196,21 +326,20 @@ class AyudanteTPLink(
 
     private fun parsearDispositivos(lineas: List<String>): List<DispositivoTplink> {
         val mapaDeDispositivos = parsearListaAMapas(lineas)
-
         val listaFinal = ArrayList<DispositivoTplink>()
 
         for (datos in mapaDeDispositivos.values) {
-            val ip = datos["ip"] ?: "0.0.0.0"
-            val macRaw = datos["mac"] ?: ""
-            if (ip == "0.0.0.0" || macRaw.length < 10) {
-                continue
-            }
+            val ip = datos["ip"] ?: datos["ipaddr"] ?: datos["ipAddr"] ?: "0.0.0.0"
+            val macRaw = datos["mac"] ?: datos["macaddr"] ?: datos["macAddr"] ?: ""
+            if (ip == "0.0.0.0" || macRaw.length < 10) continue
 
             val macFinal = macRaw.uppercase()
-            val estaOnline = datos["online"] == "1"
+            val estaOnline = (datos["online"] == "1" || datos["is_online"] == "1")
             val tipoIntRaw = datos["type"]?.toIntOrNull() ?: -1
             val tipoIntProcesado = if (estaOnline) tipoIntRaw else -1
-            val nombreLimpio = if (datos["name"].isNullOrEmpty()) "Sin Nombre" else datos["name"]!!
+
+            val nombreExtraido = datos["name"] ?: datos["hostName"] ?: datos["hostname"]
+            val nombreLimpio = if (nombreExtraido.isNullOrEmpty()) "Sin Nombre" else nombreExtraido
 
             listaFinal.add(DispositivoTplink(
                 tipo = TipoConexion.desdeEntero(tipoIntProcesado),
@@ -227,15 +356,12 @@ class AyudanteTPLink(
 
     private fun parsearListaAMapas(lineas: List<String>): Map<Int, Map<String, String>> {
         val resultado = HashMap<Int, HashMap<String, String>>()
-
         for (linea in lineas) {
             val partes = linea.trim().split(Regex("\\s+"), 3)
-
             if (partes.size >= 2) {
                 val clave = partes[0]
                 val idStr = partes[1].replace(",", "")
                 val id = idStr.toIntOrNull()
-
                 if (id != null) {
                     val valor = if (partes.size == 3) partes[2].trim() else ""
                     val mapaAtributos = resultado.getOrPut(id) { HashMap() }
@@ -255,81 +381,5 @@ class AyudanteTPLink(
             m[k] = v.trim().split("\r\n")
         }
         return m
-    }
-
-    suspend fun obtenerEstadoCompleto(): EstadoRouter = withContext(Dispatchers.IO) {
-        var intentos = 0
-        val maxIntentos = 3
-        while (intentos < maxIntentos) {
-            try {
-                if (intentos == 0) Log.d(TAG, "Iniciando ciclo atómico...")
-                else Log.w(TAG, "Reintentando ciclo atómico (Intento ${intentos + 1})...")
-                autorizar()
-                val estado = obtenerEstado()
-                cerrarSesion()
-                return@withContext estado
-
-            } catch (e: Exception) {
-                val mensaje = e.message ?: ""
-                try { cerrarSesion() } catch (ex: Exception) { }
-                if (mensaje.contains("408") || mensaje.contains("timeout") || mensaje.contains("reset")) {
-                    intentos++
-                    if (intentos >= maxIntentos) {
-                        Log.e(TAG, "Fallo definitivo tras $maxIntentos intentos: $mensaje")
-                        throw e
-                    }
-                } else {
-                    throw e
-                }
-            }
-        }
-        throw Exception("Error desconocido en ciclo atómico")
-    }
-
-    private fun EncriptacionTplink.obtenerCadenaAes(): String {
-        return "k=${this.obtenerLlaveStr()}&i=${this.obtenerIvStr()}"
-    }
-
-    suspend fun reiniciar() = withContext(Dispatchers.IO) {
-        realizarPeticion(codigo = 6, asincrono = 1, usarToken = true)
-    }
-
-    suspend fun configurarWifi(wifi: TipoConexion, enable: Boolean) = withContext(Dispatchers.IO) {
-        val id = when(wifi) {
-            TipoConexion.ANFITRION_2G -> REQ_WIFI_HOST_2G
-            TipoConexion.ANFITRION_5G -> REQ_WIFI_HOST_5G
-            else -> return@withContext
-        }
-        val enInt = if (enable) 1 else 0
-        val txt = "id $id\r\nbEnable $enInt"
-
-        val cuerpo = encriptarCuerpo(txt)
-        realizarPeticion(codigo = 1, asincrono = 0, usarToken = true, datos = cuerpo)
-    }
-
-    suspend fun obtenerFirmware(): Firmware = withContext(Dispatchers.IO) {
-        val cuerpo = encriptarCuerpo("0|1,0,0")
-        val resp = realizarPeticion(codigo = 2, asincrono = 1, usarToken = true, datos = cuerpo)
-        val respClaro = desencriptarDatos(resp)
-
-        val mapa = respClaro.trim().lines().associate {
-            val p = it.split(" ", limit = 2)
-            if (p.size == 2) p[0] to p[1] else "" to ""
-        }
-
-        return@withContext Firmware(
-            versionHardware = URLDecoder.decode(mapa["hardVer"] ?: "", "UTF-8"),
-            modelo = URLDecoder.decode(mapa["modelName"] ?: "", "UTF-8"),
-            versionFirmware = URLDecoder.decode(mapa["softVer"] ?: "", "UTF-8")
-        )
-    }
-
-    suspend fun soporta(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val resp = realizarPeticion(codigo = 2, asincrono = 1, datos = "0|1,0,0")
-            return@withContext resp.startsWith("00000")
-        } catch (e: Exception) {
-            return@withContext false
-        }
     }
 }

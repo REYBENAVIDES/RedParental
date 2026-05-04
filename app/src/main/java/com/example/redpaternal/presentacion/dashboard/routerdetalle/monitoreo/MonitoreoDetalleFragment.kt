@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -13,6 +14,7 @@ import com.example.redpaternal.R
 import com.example.redpaternal.databinding.FragmentMonitoreoDetalleBinding
 import com.example.redpaternal.datos.modelo.Dispositivo
 import com.example.redpaternal.presentacion.adapters.UsoActividadAdapter
+import com.example.redpaternal.presentacion.dashboard.routerdetalle.viewmodel.RouterViewModel
 import com.example.redpaternal.servicios.MonitoreoService
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -93,9 +95,14 @@ class MonitoreoDetalleFragment : Fragment(R.layout.fragment_monitoreo_detalle) {
         popup.menuInflater.inflate(R.menu.menu_detalle_dispositivo, popup.menu)
 
         val itemNotificar = popup.menu.findItem(R.id.opc_notificar)
+        val itemBloquear = popup.menu.findItem(R.id.opc_bloquear) // Asegúrate de tener este ID en tu XML
         val activo = estaNotificacionActiva()
 
+        // Obtenemos el estado actual del dispositivo
+        val estaBloqueado = dispositivo.estaBloqueado
+
         itemNotificar.title = if (activo) "Desactivar seguimiento" else "Activar seguimiento"
+        itemBloquear.title = if (estaBloqueado) "Desbloquear Internet" else "Bloquear Internet"
 
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -109,11 +116,51 @@ class MonitoreoDetalleFragment : Fragment(R.layout.fragment_monitoreo_detalle) {
                         actualizarEstadoNotificacionUI()
                         notificarCambioAlServicio()
                     } else {
-                        mostrarDialogoPersonalizado()
+                        mostrarDialogoPersonalizado(
+                            titulo = "Seguimiento en Vivo",
+                            descripcion = "Al activar esta opción, verás una notificación fija con:",
+                            icono1 = R.drawable.ic_reloj,
+                            texto1 = "Sitio actual y tiempo de uso",
+                            icono2 = R.drawable.ic_clave, // Usa el icono adecuado que tengas
+                            texto2 = "Botones de bloqueo rápido",
+                            textoBotonAccion = "Activar",
+                            colorBotonAccion = R.color.primario
+                        ) {
+                            guardarEstadoNotificacion(true)
+                            actualizarEstadoNotificacionUI()
+                            notificarCambioAlServicio()
+                        }
                     }
                     true
                 }
                 R.id.opc_bloquear -> {
+                    if (estaBloqueado) {
+                        mostrarDialogoPersonalizado(
+                            titulo = "Desbloquear Acceso",
+                            descripcion = "El dispositivo recuperará acceso total a Internet de forma inmediata.",
+                            icono1 = R.drawable.ic_reloj, // Un ícono de éxito o similar
+                            texto1 = "Conexión a la red restaurada",
+                            icono2 = R.drawable.ic_reloj, // O cualquier ícono relevante
+                            texto2 = "Los filtros por categoría seguirán activos",
+                            textoBotonAccion = "Desbloquear",
+                            colorBotonAccion = R.color.success
+                        ) {
+                            ejecutarBloqueo(false)
+                        }
+                    } else {
+                        mostrarDialogoPersonalizado(
+                            titulo = "Bloquear Acceso",
+                            descripcion = "El dispositivo perderá conexión a Internet inmediatamente.",
+                            icono1 = R.drawable.ic_reloj, // Un ícono de prohibido
+                            texto1 = "Conexión a red denegada",
+                            icono2 = R.drawable.ic_reloj, // O cualquier ícono de sin internet
+                            texto2 = "Bloqueo estricto a nivel de router",
+                            textoBotonAccion = "Bloquear",
+                            colorBotonAccion = R.color.danger
+                        ) {
+                            ejecutarBloqueo(true)
+                        }
+                    }
                     true
                 }
                 else -> false
@@ -122,7 +169,17 @@ class MonitoreoDetalleFragment : Fragment(R.layout.fragment_monitoreo_detalle) {
         popup.show()
     }
 
-    private fun mostrarDialogoPersonalizado() {
+    private fun mostrarDialogoPersonalizado(
+        titulo: String,
+        descripcion: String,
+        icono1: Int,
+        texto1: String,
+        icono2: Int,
+        texto2: String,
+        textoBotonAccion: String,
+        colorBotonAccion: Int,
+        accion: () -> Unit
+    ) {
         val vistaDialogo = layoutInflater.inflate(R.layout.dialog_notificacion_config, null)
         val constructor = MaterialAlertDialogBuilder(requireContext())
             .setView(vistaDialogo)
@@ -131,13 +188,28 @@ class MonitoreoDetalleFragment : Fragment(R.layout.fragment_monitoreo_detalle) {
         val dialogo = constructor.create()
         dialogo.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-        val btnActivar = vistaDialogo.findViewById<MaterialButton>(R.id.btnActivarDialogo)
-        val btnCancelar = vistaDialogo.findViewById<MaterialButton>(R.id.btnCancelarDialogo)
+        // Referencias a las vistas del diálogo
+        val tvTitulo = vistaDialogo.findViewById<android.widget.TextView>(R.id.tvTituloDialogo) // Asegúrate de agregar id en tu XML para los textos
+        val tvDescripcion = vistaDialogo.findViewById<android.widget.TextView>(R.id.tvDescripcionDialogo)
+        val ivItem1 = vistaDialogo.findViewById<android.widget.ImageView>(R.id.ivItem1Dialogo)
+        val tvItem1 = vistaDialogo.findViewById<android.widget.TextView>(R.id.tvItem1Dialogo)
+        val ivItem2 = vistaDialogo.findViewById<android.widget.ImageView>(R.id.ivItem2Dialogo)
+        val tvItem2 = vistaDialogo.findViewById<android.widget.TextView>(R.id.tvItem2Dialogo)
 
-        btnActivar.setOnClickListener {
-            guardarEstadoNotificacion(true)
-            actualizarEstadoNotificacionUI()
-            notificarCambioAlServicio()
+        val btnAccion = vistaDialogo.findViewById<MaterialButton>(R.id.btnActivarDialogo)
+        val btnCancelar = vistaDialogo.findViewById<MaterialButton>(R.id.btnCancelarDialogo)
+        tvTitulo?.text = titulo
+        tvDescripcion?.text = descripcion
+        ivItem1?.setImageResource(icono1)
+        tvItem1?.text = texto1
+        ivItem2?.setImageResource(icono2)
+        tvItem2?.text = texto2
+
+        btnAccion.text = textoBotonAccion
+        btnAccion.backgroundTintList = ContextCompat.getColorStateList(requireContext(), colorBotonAccion)
+
+        btnAccion.setOnClickListener {
+            accion()
             dialogo.dismiss()
         }
 
@@ -146,6 +218,24 @@ class MonitoreoDetalleFragment : Fragment(R.layout.fragment_monitoreo_detalle) {
         }
 
         dialogo.show()
+    }
+
+    private fun ejecutarBloqueo(bloquear: Boolean) {
+        Toast.makeText(context, if (bloquear) "Procesando bloqueo..." else "Procesando desbloqueo...", Toast.LENGTH_SHORT).show()
+
+        viewModel.cambiarEstadoBloqueoDispositivo(
+            macRouter = macRouter,
+            macDispositivo = dispositivo.macAddress,
+            nombre = dispositivo.nombre,
+            bloquear = bloquear
+        ) { exito, mensaje ->
+            if (exito) {
+                dispositivo.estaBloqueado = bloquear
+                Toast.makeText(context, mensaje, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Error: $mensaje", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun estaNotificacionActiva(): Boolean {

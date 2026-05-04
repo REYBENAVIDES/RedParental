@@ -41,6 +41,27 @@ class AyudanteBaseDatosFirebase(private val context: Context) {
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
+    suspend fun obtenerCredencialesRouter(macRouter: String): Pair<String, String>? {
+        val usuario = auth.currentUser ?: return null
+        return try {
+            val query = db.collection("usuarios").document(usuario.uid)
+                .collection("routers")
+                .whereEqualTo("direccionMac", macRouter)
+                .get(fuenteDatos) // Usa caché si estás offline
+                .await()
+
+            if (!query.isEmpty) {
+                val ip = query.documents[0].getString("ipPuertaEnlace") ?: ""
+                val clave = query.documents[0].getString("claveAdmin") ?: ""
+                Pair(ip, clave)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private val fuenteDatos: Source
         get() = if (hayInternet()) Source.DEFAULT else Source.CACHE
 
@@ -496,17 +517,26 @@ class AyudanteBaseDatosFirebase(private val context: Context) {
 
                 val datosActualizar = hashMapOf(
                     "macAddress" to dispositivo.macAddress,
+                    "mac" to dispositivo.macAddress, // Campo redundante de tu versión anterior, pero útil si lo usas
                     "ipAddress" to dispositivo.ipAddress,
                     "fabricante" to dispositivo.fabricante,
                     "estaConectado" to dispositivo.estaConectado,
+                    "estado" to if (dispositivo.estaConectado) "ONLINE" else "OFFLINE",
                     "tipo" to dispositivo.tipo.name,
                     "nombre" to nombreFinal,
                     "fechaUltimaConexion" to FieldValue.serverTimestamp(),
-                    "tiempoConectadoHoy" to tiempoLong
+                    "tiempoConectadoHoy" to tiempoLong,
+                    "tiempoAcumuladoDia" to 0L,
+                    "estaBloqueado" to false,
+                    "ultimaActualizacion" to FieldValue.serverTimestamp(),
+                    "ultimaActualizacionSitios" to FieldValue.serverTimestamp() // ¡ESTE ES EL QUE REVIVIRÁ TU FRAGMENTO!
                 )
 
                 batch.set(docRef, datosActualizar, SetOptions.merge())
             }
+
+            val updateRouterData = hashMapOf("fechaUltimoEscaneoLocal" to FieldValue.serverTimestamp())
+            batch.update(routerRef, updateRouterData as Map<String, Any>)
 
             batch.commit().await()
             Log.d("AyudanteDB", "Lote actualizado con validación de nombres.")
