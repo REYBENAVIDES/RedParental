@@ -130,13 +130,35 @@ class MonitoreoViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun alternarBloqueoDeSitio(nombreSitio: String, urlSitio: String, bloquear: Boolean) {
         if (macRouterActual.isNullOrEmpty() || dispositivoActual == null) return
+
         viewModelScope.launch(Dispatchers.IO) {
-            ayudanteFirebase.actualizarEstadoBloqueo(
-                macRouterActual!!,
-                dispositivoActual!!.macAddress,
-                nombreSitio,
-                bloquear
-            )
+            try {
+                val credenciales = ayudanteFirebase.obtenerCredencialesRouter(macRouterActual!!)
+                if (credenciales == null || credenciales.second.isEmpty()) {
+                    throw Exception("No se encontraron credenciales del router.")
+                }
+
+                val ayudanteTplink = AyudanteTPLink.obtenerInstancia(credenciales.first, credenciales.second)
+
+                ayudanteTplink.gestionarSitioControlParental(
+                    macDispositivo = dispositivoActual!!.macAddress,
+                    nombreDispositivo = dispositivoActual!!.nombre,
+                    dominio = urlSitio,
+                    bloquear = bloquear
+                )
+
+                ayudanteFirebase.actualizarEstadoBloqueo(
+                    macRouterActual!!,
+                    dispositivoActual!!.macAddress,
+                    nombreSitio,
+                    bloquear
+                )
+
+                Log.d("MonitoreoVM", "✅ Sincronización completa de Control Parental para $urlSitio")
+
+            } catch (e: Exception) {
+                Log.e("MonitoreoVM", "❌ Error al gestionar sitio: ${e.message}")
+            }
         }
     }
 

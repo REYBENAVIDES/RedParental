@@ -214,7 +214,8 @@ class AyudanteTPLink private constructor(
         try {
             transaccionSegura(esManual = true) {
                 val mac = macDispositivo.replace(":", "-").uppercase()
-                val dominioLimpio = dominio.replace(Regex("^https?://"), "").replace("www.", "").trim()
+
+                val dominioLimpio = dominio.substringAfter("://").substringAfter("www.").substringBefore("/").trim()
 
                 val cuerpoReq = encriptarCuerpo("55|1,0,0")
                 val respEnc = realizarPeticion(codigo = 2, asincrono = 1, usarToken = true, datos = cuerpoReq)
@@ -227,11 +228,11 @@ class AyudanteTPLink private constructor(
                 var esPerfilNuevo = false
 
                 for (i in 0..31) {
-                    val macRegistrada = lineas.find { it.startsWith("cMac $i ") }?.substringAfter("cMac $i ")
+                    val macRegistrada = lineas.find { it.startsWith("cMac $i ") }?.substringAfter("cMac $i ")?.trim()
                     if (macRegistrada.equals(mac, ignoreCase = true)) {
                         deviceIndex = i
-                        // Verificar a qué perfil pertenece (OwnerId 1 significa Perfil 0)
-                        val ownerId = lineas.find { it.startsWith("cOwnerId $i ") }?.substringAfter("cOwnerId $i ")?.toIntOrNull() ?: 0
+                        // Verificamos si este dispositivo ya pertenece a un perfil activo
+                        val ownerId = lineas.find { it.startsWith("cOwnerId $i ") }?.substringAfter("cOwnerId $i ")?.trim()?.toIntOrNull() ?: 0
                         if (ownerId > 0) profileIndex = ownerId - 1
                         break
                     }
@@ -239,8 +240,8 @@ class AyudanteTPLink private constructor(
 
                 if (deviceIndex == -1) {
                     for (i in 0..31) {
-                        val macEnSlot = lineas.find { it.startsWith("cMac $i ") }?.substringAfter("cMac $i ")
-                        if (macEnSlot.isNullOrEmpty()) {
+                        val ownerIdStr = lineas.find { it.startsWith("cOwnerId $i ") }?.substringAfter("cOwnerId $i ")?.trim()
+                        if (ownerIdStr.isNullOrEmpty() || ownerIdStr == "0") {
                             deviceIndex = i
                             break
                         }
@@ -251,7 +252,7 @@ class AyudanteTPLink private constructor(
                 if (profileIndex == -1) {
                     esPerfilNuevo = true
                     for (i in 0..15) {
-                        val nombrePerfil = lineas.find { it.startsWith("rName $i ") }?.substringAfter("rName $i ")
+                        val nombrePerfil = lineas.find { it.startsWith("rName $i ") }?.substringAfter("rName $i ")?.trim()
                         if (nombrePerfil.isNullOrEmpty()) {
                             profileIndex = i
                             break
@@ -259,7 +260,7 @@ class AyudanteTPLink private constructor(
                     }
                     if (profileIndex == -1) throw Exception("Límite de 16 perfiles alcanzado en el router.")
                 } else {
-                    // Si ya tiene perfil, extraemos sus sitios actuales
+                    // Extraer los sitios actuales del perfil
                     val sitiosRaw = lineas.find { it.startsWith("website $profileIndex ") }?.substringAfter("website $profileIndex ") ?: ""
                     currentWebsites = URLDecoder.decode(sitiosRaw, "UTF-8").trim()
                 }
@@ -286,11 +287,13 @@ class AyudanteTPLink private constructor(
                     sb.append("enableWeekendTimeLimit $profileIndex 0\r\n")
                     sb.append("enableWorkdayBedTime $profileIndex 0\r\n")
                     sb.append("enableWeekendBedTime $profileIndex 0\r\n")
-                    sb.append("cMac $deviceIndex $mac\r\n")
-                    sb.append("cName $deviceIndex $nombreSeguro\r\n")
-                    sb.append("cType $deviceIndex 0\r\n")
-                    sb.append("cOwnerId $deviceIndex ${profileIndex + 1}\r\n")
                 }
+
+                val nombreDispositivoSeguro = nombreDispositivo.replace(" ", "_").take(15)
+                sb.append("cMac $deviceIndex $mac\r\n")
+                sb.append("cName $deviceIndex $nombreDispositivoSeguro\r\n")
+                sb.append("cType $deviceIndex 0\r\n")
+                sb.append("cOwnerId $deviceIndex ${profileIndex + 1}\r\n")
 
                 sb.append("website $profileIndex $nuevosSitiosEncoded\r\n")
 
@@ -300,7 +303,7 @@ class AyudanteTPLink private constructor(
 
                 if (!respWrite.contains("00000")) throw Exception("El router rechazó la escritura de sitios.")
 
-                val estadoBloqueo = if (listaSitios.isNotEmpty()) "1" else "0"
+                 val estadoBloqueo = if (listaSitios.isNotEmpty()) "1" else "0"
                 val comandoActivar = "advanced pc -edit index:$profileIndex block:$estadoBloqueo"
 
                 val cuerpoActivar = encriptarCuerpo(comandoActivar)
@@ -314,7 +317,7 @@ class AyudanteTPLink private constructor(
         } catch (e: Exception) {
             val msg = e.message ?: ""
             if (msg.contains("abort", ignoreCase = true) || msg.contains("reset", ignoreCase = true)) {
-                Log.w(TAG, "⚠️ Auto-bloqueo de sitio detectado (conexión cortada). Éxito asumido.")
+                Log.w(TAG, "⚠️ Auto-bloqueo de sitio detectado. Éxito asumido.")
             } else {
                 throw Exception("Error Control Parental: $msg")
             }
