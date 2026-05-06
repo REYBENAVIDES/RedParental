@@ -206,6 +206,123 @@ class AyudanteTPLink private constructor(
         )
     }
 
+
+    suspend fun gestionarSitioControlParental(macDispositivo: String, nombreDispositivo: String, dominio: String, bloquear: Boolean) {
+        pausarEscaneoFondo.set(true)
+        Log.d(TAG, "⏸️ PAUSA GLOBAL para Gestión de Sitios (Control Parental).")
+
+        try {
+            transaccionSegura(esManual = true) {
+                val mac = macDispositivo.replace(":", "-").uppercase()
+                val dominioLimpio = dominio.replace(Regex("^https?://"), "").replace("www.", "").trim()
+
+                val cuerpoReq = encriptarCuerpo("55|1,0,0")
+                val respEnc = realizarPeticion(codigo = 2, asincrono = 1, usarToken = true, datos = cuerpoReq)
+                val respClara = desencriptarDatos(respEnc)
+                val lineas = respClara.lines().map { it.trim() }
+
+                var deviceIndex = -1
+                var profileIndex = -1
+                var currentWebsites = ""
+                var esPerfilNuevo = false
+
+                for (i in 0..31) {
+                    val macRegistrada = lineas.find { it.startsWith("cMac $i ") }?.substringAfter("cMac $i ")
+                    if (macRegistrada.equals(mac, ignoreCase = true)) {
+                        deviceIndex = i
+                        // Verificar a qué perfil pertenece (OwnerId 1 significa Perfil 0)
+                        val ownerId = lineas.find { it.startsWith("cOwnerId $i ") }?.substringAfter("cOwnerId $i ")?.toIntOrNull() ?: 0
+                        if (ownerId > 0) profileIndex = ownerId - 1
+                        break
+                    }
+                }
+
+                if (deviceIndex == -1) {
+                    for (i in 0..31) {
+                        val macEnSlot = lineas.find { it.startsWith("cMac $i ") }?.substringAfter("cMac $i ")
+                        if (macEnSlot.isNullOrEmpty()) {
+                            deviceIndex = i
+                            break
+                        }
+                    }
+                    if (deviceIndex == -1) throw Exception("Límite de 32 dispositivos alcanzado en el router.")
+                }
+
+                if (profileIndex == -1) {
+                    esPerfilNuevo = true
+                    for (i in 0..15) {
+                        val nombrePerfil = lineas.find { it.startsWith("rName $i ") }?.substringAfter("rName $i ")
+                        if (nombrePerfil.isNullOrEmpty()) {
+                            profileIndex = i
+                            break
+                        }
+                    }
+                    if (profileIndex == -1) throw Exception("Límite de 16 perfiles alcanzado en el router.")
+                } else {
+                    // Si ya tiene perfil, extraemos sus sitios actuales
+                    val sitiosRaw = lineas.find { it.startsWith("website $profileIndex ") }?.substringAfter("website $profileIndex ") ?: ""
+                    currentWebsites = URLDecoder.decode(sitiosRaw, "UTF-8").trim()
+                }
+
+                val listaSitios = if (currentWebsites.isNotEmpty()) currentWebsites.split(",").toMutableList() else mutableListOf()
+
+                if (bloquear) {
+                    if (dominioLimpio.isNotEmpty() && !listaSitios.contains(dominioLimpio)) {
+                        listaSitios.add(dominioLimpio)
+                    }
+                } else {
+                    listaSitios.remove(dominioLimpio)
+                }
+
+                val nuevosSitiosEncoded = URLEncoder.encode(listaSitios.joinToString(","), "UTF-8")
+
+                val sb = StringBuilder()
+                sb.append("id 55|1,0,0\r\n")
+
+                if (esPerfilNuevo) {
+                    val nombreSeguro = nombreDispositivo.replace(" ", "_").take(15)
+                    sb.append("rName $profileIndex $nombreSeguro\r\n")
+                    sb.append("enableWorkdayTimeLimit $profileIndex 0\r\n")
+                    sb.append("enableWeekendTimeLimit $profileIndex 0\r\n")
+                    sb.append("enableWorkdayBedTime $profileIndex 0\r\n")
+                    sb.append("enableWeekendBedTime $profileIndex 0\r\n")
+                    sb.append("cMac $deviceIndex $mac\r\n")
+                    sb.append("cName $deviceIndex $nombreSeguro\r\n")
+                    sb.append("cType $deviceIndex 0\r\n")
+                    sb.append("cOwnerId $deviceIndex ${profileIndex + 1}\r\n")
+                }
+
+                sb.append("website $profileIndex $nuevosSitiosEncoded\r\n")
+
+                val cuerpoEscritura = encriptarCuerpo(sb.toString())
+                val respWriteEnc = realizarPeticion(codigo = 1, asincrono = 0, usarToken = true, datos = cuerpoEscritura)
+                val respWrite = desencriptarDatos(respWriteEnc)
+
+                if (!respWrite.contains("00000")) throw Exception("El router rechazó la escritura de sitios.")
+
+                val estadoBloqueo = if (listaSitios.isNotEmpty()) "1" else "0"
+                val comandoActivar = "advanced pc -edit index:$profileIndex block:$estadoBloqueo"
+
+                val cuerpoActivar = encriptarCuerpo(comandoActivar)
+                val respActEnc = realizarPeticion(codigo = 0, asincrono = 0, usarToken = true, datos = cuerpoActivar)
+                val respAct = desencriptarDatos(respActEnc)
+
+                if (!respAct.contains("00000")) throw Exception("Error al activar/desactivar perfil.")
+
+                Log.d(TAG, "✅ Sitio '$dominioLimpio' ${if(bloquear) "BLOQUEADO" else "DESBLOQUEADO"} para $mac. Perfil Activo: $estadoBloqueo")
+            }
+        } catch (e: Exception) {
+            val msg = e.message ?: ""
+            if (msg.contains("abort", ignoreCase = true) || msg.contains("reset", ignoreCase = true)) {
+                Log.w(TAG, "⚠️ Auto-bloqueo de sitio detectado (conexión cortada). Éxito asumido.")
+            } else {
+                throw Exception("Error Control Parental: $msg")
+            }
+        } finally {
+            pausarEscaneoFondo.set(false)
+            Log.d(TAG, "▶️ Desactivada PAUSA GLOBAL.")
+        }
+    }
     suspend fun bloquearDispositivoLocal(nombre: String, mac: String) {
         pausarEscaneoFondo.set(true)
         Log.d(TAG, "⏸️ PAUSA GLOBAL para Bloqueo.")
